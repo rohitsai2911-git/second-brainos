@@ -1,0 +1,133 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --background: 250 24% 98%;
+    --foreground: 240 20% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 20% 10%;
+    --muted: 240 12% 94%;
+    --muted-foreground: 240 8% 45%;
+    --border: 240 12% 88%;
+    --primary: 262 83% 58%;
+    --primary-foreground: 0 0% 100%;
+    --accent: 190 90% 45%;
+    --accent-foreground: 0 0% 100%;
+}
+
+.dark {
+    --background: 240 22% 7%;
+    --foreground: 240 15% 92%;
+    --card: 240 18% 11%;
+    --card-foreground: 240 15% 92%;
+    --muted: 240 14% 16%;
+    --muted-foreground: 240 8% 60%;
+    --border: 240 12% 20%;
+    --primary: 262 83% 66%;
+    --primary-foreground: 240 22% 7%;
+    --accent: 190 90% 50%;
+    --accent-foreground: 240 22% 7%;
+}
+
+* {
+    border-color: hsl(var(--border));
+}
+
+body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-feature-settings: "cv02", "cv03", "cv04";
+}
+
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+}
+
+.gradient-text {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.glass {
+    background: hsl(var(--card) / 0.7);
+    backdrop-filter: blur(12px);
+}
+
+.prose-sbo {
+    line-height: 1.7;
+}
+
+.prose-sbo p {
+    margin: 0.5rem 0;
+}
+
+.prose-sbo pre {
+    background: hsl(var(--muted));
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    font-size: 0.85rem;
+    margin: 0.75rem 0;
+}
+
+.prose-sbo code {
+    background: hsl(var(--muted));
+    padding: 0.1rem 0.35rem;
+    border-radius: 0.25rem;
+    font-size: 0.85em;
+}
+
+.prose-sbo pre code {
+    background: transparent;
+    padding: 0;
+}
+
+.prose-sbo ul,
+.prose-sbo ol {
+    padding-left: 1.5rem;
+    margin: 0.5rem 0;
+}
+
+.prose-sbo ul {
+    list-style: disc;
+}
+
+.prose-sbo ol {
+    list-style: decimal;
+}
+
+.prose-sbo h1,
+.prose-sbo h2,
+.prose-sbo h3 {
+    font-weight: 600;
+    margin: 1rem 0 0.5rem;
+}
+
+.prose-sbo h1 {
+    font-size: 1.4rem;
+}
+
+.prose-sbo h2 {
+    font-size: 1.2rem;
+}
+
+.prose-sbo h3 {
+    font-size: 1.05rem;
+}
