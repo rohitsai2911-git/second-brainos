@@ -133,15 +133,26 @@ def _rebuild_links(db: Session, user_id: str, new_doc_id: str) -> None:
         db.rollback()
 
 
+def _set_stage(db: Session, document: models.Document, stage: str) -> None:
+    document.processing_stage = stage
+    db.commit()
+
+
 def ingest_document(db: Session, document: models.Document, raw_text: str) -> models.Document:
     """Full pipeline for one document row already persisted with status=processing."""
     try:
+        _set_stage(db, document, "extracting")
         document.content_text = raw_text[:200_000]
+        document.error_message = ""
+        document.processing_warning = ""
+        db.commit()
+
         document.summary = llm.summarize(raw_text) if raw_text else ""
         if not document.tags:
             document.tags = llm.auto_tags(raw_text[:6000], document.title) if raw_text else []
+        db.commit()
 
-        # chunk + persist
+        _set_stage(db, document, "chunking")
         chunk_texts = chunk_text(raw_text)
         chunk_rows = []
         for i, text in enumerate(chunk_texts):
@@ -149,22 +160,28 @@ def ingest_document(db: Session, document: models.Document, raw_text: str) -> mo
                                user_id=document.user_id, chunk_index=i, text=text)
             db.add(row)
             chunk_rows.append({"id": row.id, "text": text, "index": i})
+        db.commit()
 
-        # embed + index in Qdrant
+        _set_stage(db, document, "indexing")
         try:
             vectorstore.upsert_chunks(document.user_id, document.id, document.title,
                                       document.file_type, chunk_rows)
         except Exception:
-            pass  # DB rows remain; search will backfill on next ingest
+            document.processing_warning = "Vector index unavailable; keyword fallback active."
 
+        _set_stage(db, document, "linking")
         document.status = "ready"
+        if document.processing_stage != "error":
+            document.processing_stage = "ready"
         db.commit()
         db.refresh(document)
 
         _rebuild_links(db, document.user_id, document.id)
         return document
-    except Exception:
+    except Exception as e:
         db.rollback()
         document.status = "error"
+        document.processing_stage = "error"
+        document.error_message = str(e)[:500] or "Document processing failed."
         db.commit()
         return document
