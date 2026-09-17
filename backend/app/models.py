@@ -44,6 +44,9 @@ class Document(Base):
     summary = Column(Text, default="")
     tags = Column(JSON, default=list)
     status = Column(String, default="ready")            # processing | ready | error
+    processing_stage = Column(String, default="")       # queued | extracting | chunking | indexing | linking | ready | error
+    error_message = Column(Text, default="")
+    processing_warning = Column(Text, default="")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     owner = relationship("User", back_populates="documents")

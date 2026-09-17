@@ -16,3 +16,18 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def ensure_reliability_columns() -> None:
+    """Add reliability columns to existing DBs (create_all only covers fresh DBs)."""
+    from sqlalchemy import inspect, text
+    needed = {
+        "processing_stage": "VARCHAR",
+        "error_message": "TEXT",
+        "processing_warning": "TEXT",
+    }
+    with engine.begin() as conn:
+        existing = {c["name"] for c in inspect(conn).get_columns("documents")}
+        for name, ddl in needed.items():
+            if name not in existing:
+                conn.execute(text(f"ALTER TABLE documents ADD COLUMN {name} {ddl}"))

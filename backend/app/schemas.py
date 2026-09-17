@@ -43,6 +43,9 @@ class DocumentOut(BaseModel):
     summary: str
     tags: list[str]
     status: str
+    processing_stage: str = ""
+    error_message: str = ""
+    processing_warning: str = ""
     created_at: datetime
 
     class Config:

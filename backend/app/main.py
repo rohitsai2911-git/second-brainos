@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .database import engine, Base
+from . import database as _db
 from .routers import auth, documents, search, chat, flashcards, tasks, graph, stats
 from .services import vectorstore
 
@@ -26,6 +27,7 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning("DB not ready (attempt %d): %s", attempt + 1, e)
             time.sleep(2)
+    _db.ensure_reliability_columns()
     try:
         vectorstore.ensure_collection()
         logger.info("Qdrant collection ready")
