@@ -5,8 +5,11 @@ gracefully (keyword-search fallback, empty contexts). Verifies all endpoints,
 auth flow, ingestion pipeline, RAG chat, flashcards SM-2, study plan, graph.
 """
 import os
+import struct
 import sys
 import tempfile
+import time
+import zlib
 
 os.environ["DATABASE_URL"] = "sqlite:///./smoke.db"
 os.environ["UPLOAD_DIR"] = tempfile.mkdtemp()
@@ -17,7 +20,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi.testclient import TestClient  # noqa: E402
 from app.main import app  # noqa: E402
-from app.database import Base, engine  # noqa: E402
+from app.config import settings  # noqa: E402
+from app.database import Base, engine, SessionLocal  # noqa: E402
+from app import models  # noqa: E402
 
 if os.path.exists("smoke.db"):
     os.remove("smoke.db")
@@ -210,6 +215,86 @@ check("retry on ready -> 409", r.status_code == 409, r.text[:200])
 
 r = client.post("/api/documents/no-such-id/retry", headers=H)
 check("retry unknown -> 404", r.status_code == 404, r.text[:200])
+
+# ── Upload reliability: binary types, delete, retry roundtrip, size cap ──
+def _make_pdf() -> bytes:
+    objs = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 100] "
+        b"/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+        b"<< /Length 60 >>\nstream\nBT /F1 14 Tf 20 50 Td "
+        b"(Smoke PDF about attention) Tj ET\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    out = [b"%PDF-1.4\n"]
+    offsets = [0]
+    for i, body in enumerate(objs, 1):
+        offsets.append(sum(len(x) for x in out))
+        out.append(f"{i} 0 obj\n".encode() + body + b"\nendobj\n")
+    xref = sum(len(x) for x in out)
+    out.append(f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n".encode())
+    for off in offsets[1:]:
+        out.append(f"{off:010d} 00000 n \n".encode())
+    out.append(f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\n"
+               f"startxref\n{xref}\n%%EOF".encode())
+    return b"".join(out)
+
+
+def _make_png() -> bytes:
+    def chunk(ctype: bytes, payload: bytes) -> bytes:
+        c = struct.pack(">I", len(payload)) + ctype + payload
+        return c + struct.pack(">I", zlib.crc32(ctype + payload) & 0xFFFFFFFF)
+    ihdr = struct.pack(">IIBBBBB", 4, 4, 8, 2, 0, 0, 0)
+    raw = b"".join(b"\x00" + bytes([255, 0, 0]) * 4 for _ in range(4))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr)
+            + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+
+
+def _wait_ready(doc_id: str, timeout_s: int = 20) -> dict:
+    doc: dict = {}
+    for _ in range(timeout_s):
+        doc = client.get(f"/api/documents/{doc_id}", headers=H).json()
+        if doc.get("status") in ("ready", "error"):
+            return doc
+        time.sleep(1)
+    return doc
+
+
+r = client.post("/api/documents/upload", files={"file": ("smoke.pdf", _make_pdf())}, headers=H)
+check("upload pdf -> 201 typed", r.status_code == 201 and r.json()["file_type"] == "pdf", r.text[:200])
+pdf_id = r.json()["id"]
+d = _wait_ready(pdf_id)
+check("pdf ready + text extracted", d.get("status") == "ready" and "attention" in (d.get("content_text") or ""),
+      str(d)[:200])
+
+r = client.post("/api/documents/upload", files={"file": ("red.png", _make_png())}, headers=H)
+check("upload image -> 201 typed", r.status_code == 201 and r.json()["file_type"] == "image", r.text[:200])
+img_id = r.json()["id"]
+check("image ready", _wait_ready(img_id).get("status") == "ready")
+
+r = client.delete(f"/api/documents/{img_id}", headers=H)
+check("delete uploaded doc -> 204", r.status_code == 204, r.text[:200])
+r = client.get(f"/api/documents/{img_id}", headers=H)
+check("deleted upload -> 404", r.status_code == 404, r.text[:200])
+
+db = SessionLocal()
+db.query(models.Document).filter(models.Document.id == pdf_id).update(
+    {"status": "error", "processing_stage": "error", "error_message": "simulated failure"})
+db.commit()
+db.close()
+r = client.post(f"/api/documents/{pdf_id}/retry", headers=H)
+check("retry on error accepted", r.status_code == 200 and r.json()["status"] == "processing", r.text[:200])
+d = _wait_ready(pdf_id)
+check("retry roundtrip -> ready, error cleared",
+      d.get("status") == "ready" and not d.get("error_message"), str(d)[:200])
+
+old_cap, settings.MAX_UPLOAD_MB = settings.MAX_UPLOAD_MB, 1
+try:
+    r = client.post("/api/documents/upload", files={"file": ("big.bin", b"x" * 2 * 1024 * 1024)}, headers=H)
+    check("upload over cap -> 413", r.status_code == 413, r.text[:200])
+finally:
+    settings.MAX_UPLOAD_MB = old_cap
 
 print(f"\n{'='*50}\nPASSED: {len(passed)}  FAILED: {len(failed)}")
 if failed:
