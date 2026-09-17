@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (Column, String, Text, DateTime, ForeignKey, Integer,
-                        Float, Boolean, JSON)
+                         Float, JSON)
 from sqlalchemy.orm import relationship
 
 from .database import Base

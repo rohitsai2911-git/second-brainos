@@ -95,7 +95,8 @@ GET  /api/stats                             dashboard aggregates
 
 ```bash
 # Backend (local venv)
-cd backend && pip install -r requirements.txt
+cd backend && pip install -r requirements-dev.txt
+python -m compileall -q app scripts && ruff check app scripts
 uvicorn app.main:app --reload
 
 # Frontend
@@ -105,6 +106,10 @@ cd frontend && npm install && npm run dev
 .venv/Scripts/python backend/scripts/smoke_test.py   # Windows
 python backend/scripts/smoke_test.py                 # POSIX
 ```
+
+CI (`.github/workflows/ci.yml`) runs the same gates on every push/PR:
+backend compileall + ruff + smoke, frontend `npm run build`,
+and `docker compose config` validation.
 
 ## Project structure
 
