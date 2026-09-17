@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
@@ -9,7 +9,7 @@ import {
     FileText, Sparkles, Network,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import type { DocumentDetail } from "@/lib/types";
+import type { Document, DocumentDetail } from "@/lib/types";
 import { fileTypeMeta } from "@/components/doc-card";
 
 export default function DocumentViewerPage() {
@@ -19,19 +19,55 @@ export default function DocumentViewerPage() {
     const [error, setError] = useState("");
     const [explanation, setExplanation] = useState("");
     const [actionBusy, setActionBusy] = useState("");
+    const [retryError, setRetryError] = useState("");
+    const retryPending = useRef(false);
+    const loadVersion = useRef(0);
 
-    const load = useCallback(() => {
-        api.get<DocumentDetail>(`/api/documents/${id}`).then(setDoc).catch((e) => setError(e.message));
+    const load = useCallback(async () => {
+        const version = ++loadVersion.current;
+        try {
+            const document = await api.get<DocumentDetail>(`/api/documents/${id}`);
+            if (version !== loadVersion.current) return;
+            setDoc(document);
+            setError("");
+        } catch {
+            if (version === loadVersion.current) setError("Could not load document. Please try again.");
+        }
     }, [id]);
 
-    useEffect(load, [load]);
-
     useEffect(() => {
-        if (doc?.status === "processing") {
-            const t = setTimeout(load, 2000);
-            return () => clearTimeout(t);
+        setDoc(null);
+        setError("");
+        setRetryError("");
+        void load();
+        return () => { loadVersion.current += 1; };
+    }, [load]);
+
+    const processing = doc?.status === "processing";
+    useEffect(() => {
+        if (!processing) return;
+        const t = setInterval(() => { void load(); }, 2000);
+        return () => clearInterval(t);
+    }, [processing, load]);
+
+    const retryProcessing = async () => {
+        if (doc?.status !== "error" || actionBusy || retryPending.current) return;
+        retryPending.current = true;
+        setActionBusy("retry");
+        setRetryError("");
+        loadVersion.current += 1;
+        try {
+            const document = await api.post<Document>(`/api/documents/${id}/retry`);
+            loadVersion.current += 1;
+            setDoc((previous) => previous?.id === document.id ? { ...previous, ...document } : previous);
+            setError("");
+        } catch {
+            setRetryError("Could not retry processing. Please try again.");
+        } finally {
+            retryPending.current = false;
+            setActionBusy("");
         }
-    }, [doc, load]);
+    };
 
     const generateFlashcards = async () => {
         setActionBusy("flashcards");
@@ -64,10 +100,11 @@ export default function DocumentViewerPage() {
         router.push("/documents");
     };
 
-    if (error) {
+    if (error && !doc) {
         return (
             <div className="space-y-4">
-                <p className="text-sm text-red-500">{error}</p>
+                <p role="alert" className="text-sm text-red-500">{error}</p>
+                <button onClick={() => { void load(); }} className="block text-sm text-primary hover:underline">Reload</button>
                 <Link href="/documents" className="text-sm text-primary hover:underline">← Back to documents</Link>
             </div>
         );
@@ -115,7 +152,9 @@ export default function DocumentViewerPage() {
                     <p className="text-sm text-muted-foreground">
                         {doc.filename} · {new Date(doc.created_at).toLocaleDateString()} ·{" "}
                         {(doc.size_bytes / 1024).toFixed(1)} KB ·{" "}
-                        <span className={doc.status === "ready" ? "text-emerald-500" : "text-amber-500"}>{doc.status}</span>
+                        <span className={doc.status === "ready" ? "text-emerald-500" : doc.status === "error" ? "text-red-500" : "text-amber-500"}>
+                            {doc.status === "processing" ? `processing · ${doc.processing_stage || "queued"}` : doc.status}
+                        </span>
                     </p>
                     {doc.tags?.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -127,11 +166,36 @@ export default function DocumentViewerPage() {
                 </div>
             </header>
 
-            {doc.status === "processing" && (
-                <div className="flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
-                    <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
-                    AI is summarizing, tagging and indexing this document…
+            {error && (
+                <div role="alert" className="flex items-center gap-3 text-sm text-red-500">
+                    <p>{error}</p>
+                    <button onClick={() => { void load(); }} className="text-primary hover:underline">Reload</button>
                 </div>
+            )}
+            {doc.status === "processing" && (
+                <div role="status" className="flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
+                    Processing stage: {doc.processing_stage || "queued"}…
+                </div>
+            )}
+            {doc.status === "error" && (
+                <div className="space-y-3 rounded-xl border border-red-500/30 bg-red-500/5 p-4 text-sm">
+                    <p role="alert" className="break-words text-red-500">{doc.error_message || "Document processing failed. Please retry."}</p>
+                    <button
+                        onClick={retryProcessing}
+                        disabled={actionBusy !== ""}
+                        className="flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium hover:bg-muted disabled:opacity-40"
+                    >
+                        {actionBusy === "retry" && <Loader2 className="h-4 w-4 animate-spin" />}
+                        {actionBusy === "retry" ? "Retrying…" : "Retry"}
+                    </button>
+                </div>
+            )}
+            {retryError && <p role="alert" className="text-sm text-red-500">{retryError}</p>}
+            {doc.processing_warning && (
+                <p role="status" className="break-words rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-500">
+                    Indexing warning: {doc.processing_warning}
+                </p>
             )}
 
             {doc.summary && (

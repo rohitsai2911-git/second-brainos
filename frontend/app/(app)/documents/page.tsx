@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Plus, StickyNote, Search as SearchIcon } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Document } from "@/lib/types";
@@ -18,45 +18,81 @@ export default function DocumentsPage() {
     const [noteTitle, setNoteTitle] = useState("");
     const [noteBody, setNoteBody] = useState("");
     const [busy, setBusy] = useState(false);
+    const [loadError, setLoadError] = useState("");
+    const [noteError, setNoteError] = useState("");
+    const [failedFiles, setFailedFiles] = useState<File[]>([]);
+    const [uploadProgress, setUploadProgress] = useState({ completed: 0, total: 0 });
+    const busyRef = useRef(false);
+    const refreshVersion = useRef(0);
 
-    const refresh = useCallback(() => {
-        api.get<Document[]>("/api/documents").then(setDocs).finally(() => setLoading(false));
+    const refresh = useCallback(async () => {
+        const version = ++refreshVersion.current;
+        try {
+            const documents = await api.get<Document[]>("/api/documents");
+            if (version !== refreshVersion.current) return;
+            setDocs(documents);
+            setLoadError("");
+        } catch {
+            if (version === refreshVersion.current) {
+                setLoadError("Could not load documents. Please try again.");
+            }
+        } finally {
+            if (version === refreshVersion.current) setLoading(false);
+        }
     }, []);
 
-    useEffect(refresh, [refresh]);
+    useEffect(() => { void refresh(); }, [refresh]);
 
+    const processing = docs.some((d) => d.status === "processing");
     useEffect(() => {
-        if (docs.some((d) => d.status === "processing")) {
-            const t = setTimeout(refresh, 2500);
-            return () => clearTimeout(t);
-        }
-    }, [docs, refresh]);
+        if (!processing) return;
+        const t = setInterval(() => { void refresh(); }, 2500);
+        return () => clearInterval(t);
+    }, [processing, refresh]);
 
     const uploadFiles = async (files: File[]) => {
-        if (files.length === 0) return;
+        if (files.length === 0 || busyRef.current) return;
+        busyRef.current = true;
         setBusy(true);
+        setUploadProgress({ completed: 0, total: files.length });
+        setFailedFiles((previous) => previous.filter((file) => !files.includes(file)));
         try {
-            for (const f of files) {
-                const form = new FormData();
-                form.append("file", f);
-                await api.upload("/api/documents/upload", form);
+            for (const file of files) {
+                try {
+                    const form = new FormData();
+                    form.append("file", file);
+                    const uploaded = await api.upload<Document>("/api/documents/upload", form);
+                    setDocs((previous) => [uploaded, ...previous.filter((d) => d.id !== uploaded.id)]);
+                    void refresh();
+                } catch {
+                    setFailedFiles((previous) => [...previous, file]);
+                } finally {
+                    setUploadProgress((previous) => ({ ...previous, completed: previous.completed + 1 }));
+                }
             }
-            refresh();
         } finally {
+            busyRef.current = false;
             setBusy(false);
         }
     };
 
     const saveNote = async () => {
-        if (!noteTitle.trim() || busy) return;
+        if (!noteTitle.trim() || busyRef.current) return;
+        busyRef.current = true;
         setBusy(true);
+        setNoteError("");
+        setUploadProgress({ completed: 0, total: 0 });
         try {
-            await api.post("/api/documents/notes", { title: noteTitle.trim(), content: noteBody });
+            const note = await api.post<Document>("/api/documents/notes", { title: noteTitle.trim(), content: noteBody });
+            setDocs((previous) => [note, ...previous.filter((d) => d.id !== note.id)]);
             setNoteOpen(false);
             setNoteTitle("");
             setNoteBody("");
-            refresh();
+            void refresh();
+        } catch {
+            setNoteError("Could not save note. Your text is still here; please try again.");
         } finally {
+            busyRef.current = false;
             setBusy(false);
         }
     };
@@ -99,6 +135,7 @@ export default function DocumentsPage() {
                         placeholder="Write anything — the AI will summarize, tag and index it automatically."
                         className="w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
                     />
+                    {noteError && <p role="alert" className="text-sm text-red-500">{noteError}</p>}
                     <button
                         onClick={saveNote}
                         disabled={!noteTitle.trim() || busy}
@@ -110,10 +147,35 @@ export default function DocumentsPage() {
             )}
 
             <UploadZone onFiles={uploadFiles} disabled={busy} />
-            {busy && (
-                <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin text-primary" /> Uploading and processing…
+            {(busy || uploadProgress.total > 0) && (
+                <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+                    {busy && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                    {uploadProgress.total > 0
+                        ? `${uploadProgress.completed} of ${uploadProgress.total} upload attempts completed${busy ? "…" : "."}`
+                        : "Saving note…"}
                 </p>
+            )}
+            {failedFiles.length > 0 && (
+                <div className="space-y-2 rounded-xl border bg-card p-4">
+                    <ul role="alert" className="space-y-1 text-sm text-red-500">
+                        {failedFiles.map((file, index) => (
+                            <li key={index} className="break-words">{file.name}: Upload failed. Please retry.</li>
+                        ))}
+                    </ul>
+                    <button
+                        onClick={() => uploadFiles(failedFiles)}
+                        disabled={busy}
+                        className="rounded-lg border px-3.5 py-2 text-sm font-medium hover:bg-muted disabled:opacity-40"
+                    >
+                        Retry failed uploads ({failedFiles.length})
+                    </button>
+                </div>
+            )}
+            {loadError && (
+                <div role="alert" className="flex items-center gap-3 text-sm text-red-500">
+                    <p>{loadError}</p>
+                    <button onClick={() => { void refresh(); }} className="text-primary hover:underline">Reload</button>
+                </div>
             )}
 
             <div className="flex flex-wrap items-center gap-2">

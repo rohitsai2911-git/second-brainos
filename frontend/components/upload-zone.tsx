@@ -46,7 +46,7 @@ export default function UploadZone({
                 Drop files here or <span className="text-primary">browse</span>
             </p>
             <p className="text-xs text-muted-foreground">
-                PDFs, notes, code, images, documents · up to 50MB
+                PDFs, notes, code, images, documents · up to 100MB per file
             </p>
         </div>
     );

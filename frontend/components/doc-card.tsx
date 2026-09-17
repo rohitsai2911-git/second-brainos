@@ -45,14 +45,20 @@ export default function DocCard({ doc }: { doc: Document }) {
                         {doc.status === "processing"
                             ? <Loader2 className="h-3 w-3 animate-spin" />
                             : <AlertCircle className="h-3 w-3" />}
-                        {doc.status}
+                        {doc.status === "processing" ? doc.processing_stage || "queued" : doc.status}
                     </span>
                 )}
             </div>
             <h3 className="line-clamp-1 font-semibold group-hover:text-primary">{doc.title}</h3>
             <p className="mt-1 line-clamp-2 flex-1 text-sm text-muted-foreground">
-                {doc.summary || "Processing content…"}
+                {doc.summary || (doc.status === "processing" ? "Processing content…" : "No summary available.")}
             </p>
+            {doc.status === "error" && (
+                <p className="mt-2 break-words text-sm text-red-500">{doc.error_message || "Document processing failed. Open this document to retry."}</p>
+            )}
+            {doc.processing_warning && (
+                <p className="mt-2 break-words text-sm text-amber-500">Indexing warning: {doc.processing_warning}</p>
+            )}
             {doc.tags?.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
                     {doc.tags.slice(0, 3).map((t) => (

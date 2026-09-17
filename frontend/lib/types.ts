@@ -15,6 +15,9 @@ export interface Document {
     summary: string;
     tags: string[];
     status: "processing" | "ready" | "error";
+    processing_stage: string;
+    error_message: string;
+    processing_warning: string;
     created_at: string;
 }
 

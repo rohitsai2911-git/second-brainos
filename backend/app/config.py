@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     # Misc
     CORS_ORIGINS: str = "http://localhost:3000"
     UPLOAD_DIR: str = "./uploads"
-    MAX_UPLOAD_MB: int = 50
+    MAX_UPLOAD_MB: int = 100
     CHUNK_SIZE: int = 900        # characters per chunk
     CHUNK_OVERLAP: int = 150
 

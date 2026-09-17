@@ -70,7 +70,7 @@ All via environment variables (see `.env.example`):
 | `JWT_SECRET` | dev value | **Change in production** |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `10080` | Token lifetime (7 days) |
 | `CORS_ORIGINS` | `http://localhost:3000` | Comma-separated origins |
-| `MAX_UPLOAD_MB` | `50` | Upload size cap |
+| `MAX_UPLOAD_MB` | `100` | Upload size cap per file (MB) |
 
 ## API overview
 
