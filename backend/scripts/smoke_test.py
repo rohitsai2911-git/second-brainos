@@ -190,6 +190,27 @@ check("deleted doc -> 404", r.status_code == 404)
 r = client.delete(f"/api/chat/conversations/{conv_id}", headers=H)
 check("delete conversation", r.status_code == 204)
 
+# ── Upload reliability regressions ──────────────────────────
+r = client.post("/api/documents/upload", files={"file": ("hello.txt", b"hello world")}, headers=H)
+check("upload text -> 201 with stage fields", r.status_code == 201 and "processing_stage" in r.json(), r.text[:200])
+up_id = r.json()["id"]
+
+r = client.post("/api/documents/upload", files={"file": ("empty.txt", b"")}, headers=H)
+check("upload empty -> 400", r.status_code == 400, r.text[:200])
+
+r = client.post("/api/documents/upload", files={"file": ("../../evil.txt", b"hello")}, headers=H)
+check("traversal filename sanitized", r.status_code == 201 and ".." not in r.json()["filename"], r.text[:200])
+
+r = client.get(f"/api/documents/{up_id}", headers=H)
+check("detail exposes stage fields", "processing_stage" in r.json() and "error_message" in r.json()
+      and "processing_warning" in r.json(), str(r.json())[:200])
+
+r = client.post(f"/api/documents/{up_id}/retry", headers=H)
+check("retry on ready -> 409", r.status_code == 409, r.text[:200])
+
+r = client.post("/api/documents/no-such-id/retry", headers=H)
+check("retry unknown -> 404", r.status_code == 404, r.text[:200])
+
 print(f"\n{'='*50}\nPASSED: {len(passed)}  FAILED: {len(failed)}")
 if failed:
     print("FAILURES:", ", ".join(failed))
