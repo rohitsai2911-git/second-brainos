@@ -1,6 +1,5 @@
 """Seed rich demo data into the running preview backend."""
 import httpx
-import time
 
 BASE = "http://localhost:8000"
 c = httpx.Client(base_url=BASE, timeout=60)

@@ -25,15 +25,15 @@ def get_graph(
 
     # De-duplicate bidirectional edges
     seen, edges = set(), []
-    for l in links:
-        if l.source_id not in doc_ids or l.target_id not in doc_ids:
+    for link in links:
+        if link.source_id not in doc_ids or link.target_id not in doc_ids:
             continue
-        key = tuple(sorted([l.source_id, l.target_id]))
+        key = tuple(sorted([link.source_id, link.target_id]))
         if key in seen:
             continue
         seen.add(key)
-        edges.append(schemas.GraphEdge(source=l.source_id, target=l.target_id,
-                                       similarity=l.similarity))
+        edges.append(schemas.GraphEdge(source=link.source_id, target=link.target_id,
+                                       similarity=link.similarity))
 
     nodes = [schemas.GraphNode(
         id=d.id, label=d.title, file_type=d.file_type,

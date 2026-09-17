@@ -1,0 +1,3 @@
+# Dev-only tooling (CI + local). Production image uses requirements.txt.
+-r requirements.txt
+ruff==0.16.8
