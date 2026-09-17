@@ -54,3 +54,7 @@ def dimension() -> int:
         except Exception:
             pass
     return _dim
+
+
+def using_neural_model() -> bool:
+    return bool(_load_model())

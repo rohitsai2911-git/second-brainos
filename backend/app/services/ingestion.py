@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from .. import models
-from . import vectorstore, llm
+from . import vectorstore, llm, embeddings
 
 CODE_EXTENSIONS = {
     ".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".c", ".cpp", ".h", ".hpp",
@@ -91,25 +91,43 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return dot / (na * nb)
 
 
-def _rebuild_links(db: Session, user_id: str, new_doc_id: str, threshold: float = 0.55) -> None:
-    """Connect the new document to its most similar existing documents."""
+def _doc_probe(document: models.Document) -> str:
+    """Compact semantic fingerprint of a document for link computation."""
+    tags = " ".join(document.tags or [])
+    return f"{document.title} {tags} {document.summary or ''} {document.content_text[:800]}"
+
+
+def _rebuild_links(db: Session, user_id: str, new_doc_id: str) -> None:
+    """Connect the new document to its most similar existing documents.
+
+    Embeds compact document probes directly (works with or without Qdrant).
+    Threshold adapts to the embedding backend; at most 4 strongest links kept.
+    """
     try:
-        new_vec = vectorstore.document_vector(user_id, new_doc_id)
-        if not new_vec:
+        new_doc = db.get(models.Document, new_doc_id)
+        if not new_doc:
             return
         others = (db.query(models.Document)
                   .filter(models.Document.user_id == user_id,
                           models.Document.id != new_doc_id,
                           models.Document.status == "ready")
                   .limit(100).all())
-        for other in others:
-            vec = vectorstore.document_vector(user_id, other.id)
-            if not vec:
-                continue
-            sim = _cosine(new_vec, vec)
-            if sim >= threshold:
-                db.add(models.DocumentLink(user_id=user_id, source_id=new_doc_id,
-                                           target_id=other.id, similarity=round(sim, 4)))
+        if not others:
+            return
+
+        new_vec = embeddings.embed_query(_doc_probe(new_doc))
+        other_vecs = embeddings.embed_texts([_doc_probe(o) for o in others])
+
+        scored = sorted(
+            ((_cosine(new_vec, vec), other) for other, vec in zip(others, other_vecs)),
+            key=lambda pair: pair[0], reverse=True,
+        )
+        floor = 0.55 if embeddings.using_neural_model() else 0.20
+        for sim, other in scored[:4]:
+            if sim < floor:
+                break
+            db.add(models.DocumentLink(user_id=user_id, source_id=new_doc_id,
+                                       target_id=other.id, similarity=round(sim, 4)))
         db.commit()
     except Exception:
         db.rollback()

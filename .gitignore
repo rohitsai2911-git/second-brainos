@@ -23,5 +23,8 @@ Thumbs.db
 .idea/
 .vscode/
 
+# Logs
+*.log
+
 # Docker
 docker-compose.override.yml
