@@ -63,11 +63,12 @@ All via environment variables (see `.env.example`):
 
 | Variable | Default | Purpose |
 |---|---|---|
+| `ENV` | `development` | `production` enforces a unique `JWT_SECRET` at boot |
 | `OPENAI_API_KEY` | *(empty)* | Empty → offline fallback engine |
 | `OPENAI_BASE_URL` | *(empty)* | Point at OpenRouter/Ollama/LM Studio etc. |
 | `LLM_MODEL` | `gpt-4o-mini` | Chat model name |
 | `EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | Local sentence-transformers model |
-| `JWT_SECRET` | dev value | **Change in production** |
+| `JWT_SECRET` | dev value | **Change in production** (`ENV=production` refuses to boot without a unique ≥32-char secret) |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `10080` | Token lifetime (7 days) |
 | `CORS_ORIGINS` | `http://localhost:3000` | Comma-separated origins |
 | `MAX_UPLOAD_MB` | `100` | Upload size cap per file (MB) |

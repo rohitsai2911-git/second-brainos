@@ -40,6 +40,7 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/secondbrain
+      ENV: ${ENV:-development}
       QDRANT_HOST: qdrant
       QDRANT_PORT: "6333"
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me-in-production}

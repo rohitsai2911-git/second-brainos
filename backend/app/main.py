@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .config import settings
+from .config import settings, validate_jwt_config, DEFAULT_JWT_SECRET
 from .database import engine, Base
 from . import database as _db
 from .routers import auth, documents, search, chat, flashcards, tasks, graph, stats
@@ -18,6 +18,10 @@ logger = logging.getLogger("secondbrain")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Fail fast on unsafe auth config in production; warn in dev.
+    validate_jwt_config(settings.ENV, settings.JWT_SECRET)
+    if settings.JWT_SECRET == DEFAULT_JWT_SECRET:
+        logger.warning("Running with default JWT_SECRET — development only")
     # Create tables (retry while Postgres boots)
     for attempt in range(10):
         try:

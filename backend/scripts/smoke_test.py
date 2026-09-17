@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi.testclient import TestClient  # noqa: E402
 from app.main import app  # noqa: E402
-from app.config import settings  # noqa: E402
+from app.config import settings, validate_jwt_config  # noqa: E402
 from app.database import Base, engine, SessionLocal  # noqa: E402
 from app import models  # noqa: E402
 
@@ -41,6 +41,24 @@ def check(name: str, cond: bool, extra: str = ""):
 # ── Health ────────────────────────────────────────────────────
 r = client.get("/api/health")
 check("health", r.status_code == 200 and r.json()["status"] == "ok")
+
+# ── JWT prod guard matrix ─────────────────────────────────────
+for bad in ("", "dev-secret-change-me-in-production", "x" * 31):
+    try:
+        validate_jwt_config("production", bad)
+        check(f"prod guard rejects {bad[:8]!r}...", False)
+    except RuntimeError:
+        check(f"prod guard rejects {bad[:8]!r}...", True)
+try:
+    validate_jwt_config("production", "x" * 32)
+    check("prod guard accepts 32-char secret", True)
+except RuntimeError:
+    check("prod guard accepts 32-char secret", False)
+try:
+    validate_jwt_config("development", "dev-secret-change-me-in-production")
+    check("dev guard tolerates default secret", True)
+except RuntimeError:
+    check("dev guard tolerates default secret", False)
 
 # ── Auth ──────────────────────────────────────────────────────
 r = client.post("/api/auth/register", json={
