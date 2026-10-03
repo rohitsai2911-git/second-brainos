@@ -19,6 +19,13 @@ def normalize_database_url(url: str) -> str:
     return url
 
 
+if not settings.DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL is empty — set it to your Postgres connection string "
+        "(e.g. the Neon pooled URL)."
+    )
+
+
 engine = create_engine(normalize_database_url(settings.DATABASE_URL), pool_pre_ping=True, pool_size=10, max_overflow=20)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
