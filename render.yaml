@@ -48,6 +48,8 @@ services:
         value: gpt-4o-mini
       - key: EMBEDDING_MODEL
         value: BAAI/bge-small-en-v1.5
+      - key: EMBEDDING_MODE
+        value: hash # free 512MB cannot hold torch; neural needs Starter+ instance
       - key: QDRANT_URL
         sync: false
       - key: QDRANT_API_KEY

@@ -14,6 +14,9 @@ def _load_model():
     if _model is None:
         with _lock:
             if _model is None:
+                if settings.EMBEDDING_MODE.strip().lower() == "hash":
+                    _model = False  # forced lightweight mode (free-tier safe)
+                    return _model
                 try:
                     from sentence_transformers import SentenceTransformer
                     _model = SentenceTransformer(settings.EMBEDDING_MODEL)

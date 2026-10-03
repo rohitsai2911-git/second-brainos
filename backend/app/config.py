@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     OPENAI_BASE_URL: str = ""
     LLM_MODEL: str = "gpt-4o-mini"
     EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
+    # neural = sentence-transformers (needs ~1GB RAM); hash = tiny
+    # deterministic fallback (fits 512MB free tiers, no torch import).
+    EMBEDDING_MODE: str = "neural"  # neural | hash
 
     # Misc
     CORS_ORIGINS: str = "http://localhost:3000"
