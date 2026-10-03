@@ -1,26 +1,27 @@
-# Second Brain OS — Render Blueprint (one-click production deploy)
+# Second Brain OS — Render Blueprint (100% free, no expiry)
+# Free-tier truth (verified Oct 2026):
+#   - Render free web services: OK, sleep after 15 min idle, wake in ~1 min.
+#   - Render free Postgres: EXPIRES after 30 days → NOT used here.
+#     Use Neon free Postgres instead (permanent, no card, 1 GB).
+#   - Render free web has NO persistent disk → uploads are ephemeral
+#     (lost on restart/redeploy). Fine for demo; paid disk fixes it.
+#   - No LLM key? Built-in offline engine works. No Qdrant? Keyword
+#     fallback search works. App boots regardless.
+#
 # Steps:
-#   1. Push this repo to GitHub.
-#   2. Render Dashboard → New → Blueprint → select repo (render.yaml auto-detected).
-#   3. Fill the prompted values:
-#        JWT_SECRET        → auto-generated (or paste your own ≥32 chars)
-#        OPENAI_API_KEY    → optional; leave empty for offline fallback engine
-#        NEXT_PUBLIC_API_URL → AFTER backend first deploys, paste its public URL
-#                             (e.g. https://sbo-backend-xxxx.onrender.com), then
-#                             Resume/trigger a manual redeploy of sbo-frontend
-#                             (NEXT_PUBLIC_* is baked in at build time).
-#        CORS_ORIGINS      → your frontend public URL
-#                             (e.g. https://sbo-frontend-xxxx.onrender.com)
-#   4. Optional vector search: create a free Qdrant Cloud cluster and set
-#      QDRANT_URL + QDRANT_API_KEY on sbo-backend. Without them the API still
-#      works — search falls back to keyword mode (graceful degradation).
+#   1. Neon (neon.tech, free): New Project → Postgres 16 → copy the
+#      connection string (pooled, `postgres://...` form is fine —
+#      backend normalizes it automatically).
+#   2. Optional Qdrant (cloud.qdrant.io, free tier): create cluster →
+#      copy REST URL + API key. Skip = keyword fallback search.
+#   3. Render → New → Blueprint → select this repo.
+#      Fill: DATABASE_URL (Neon string), NEXT_PUBLIC_API_URL (after
+#      backend first deploys, e.g. https://sbo-backend-xxxx.onrender.com),
+#      CORS_ORIGINS (frontend URL, e.g. https://sbo-frontend-xxxx.onrender.com),
+#      QDRANT_URL + QDRANT_API_KEY (if step 2), OPENAI_API_KEY (or empty).
+#   4. After backend is green, set frontend NEXT_PUBLIC_API_URL and
+#      trigger manual redeploy of sbo-frontend (NEXT_PUBLIC_* bakes at build).
 # Docs: https://render.com/docs/blueprint-spec
-
-databases:
-  - name: sbo-db
-    plan: free
-    databaseName: secondbrain
-    user: secondbrain
 
 services:
   - type: web
@@ -34,9 +35,7 @@ services:
       - key: ENV
         value: production
       - key: DATABASE_URL
-        fromDatabase:
-          name: sbo-db
-          property: connectionString
+        sync: false # paste Neon pooled connection string
       - key: JWT_SECRET
         generateValue: true
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
@@ -59,10 +58,6 @@ services:
         value: /data/uploads
       - key: MAX_UPLOAD_MB
         value: 100
-    disk:
-      name: sbo-uploads
-      mountPath: /data/uploads
-      sizeGB: 1
 
   - type: web
     name: sbo-frontend
