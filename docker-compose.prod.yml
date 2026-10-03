@@ -1,0 +1,105 @@
+# Second Brain OS — production compose for a single VPS
+# (Hetzner / DigitalOcean / EC2 / any host with Docker).
+#
+# Usage:
+#   1. Copy .env.example → .env and set at minimum:
+#        ENV=production
+#        JWT_SECRET=<≥32 random chars>   # generate: openssl rand -hex 32
+#        NEXT_PUBLIC_API_URL=https://api.yourdomain.com
+#        CORS_ORIGINS=https://yourdomain.com
+#        OPENAI_API_KEY=<optional; empty = offline fallback engine>
+#        # Optional Qdrant Cloud instead of the bundled Qdrant:
+#        # QDRANT_URL=https://xxx.cloud.qdrant.io
+#        # QDRANT_API_KEY=...
+#   2. docker compose -f docker-compose.prod.yml up --build -d
+#   3. Put a reverse proxy (Caddy/Nginx/Cloudflare Tunnel) in front of
+#      :3000 (frontend) and :8000 (backend) with TLS.
+#
+# Differences vs dev compose: strict env (no weak defaults), production
+# JWT enforcement, DB/Qdrant ports not published to the host.
+
+name: second-brain-os-prod
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-secondbrain}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:v1.8.2
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:6333/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    profiles:
+      - local-qdrant # disable with Qdrant Cloud: COMPOSE_PROFILES unset skips this
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-secondbrain}
+      ENV: production
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: "6333"
+      QDRANT_URL: ${QDRANT_URL:-}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET (≥32 chars) in .env}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-10080}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-small-en-v1.5}
+      CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS in .env}
+      UPLOAD_DIR: /data/uploads
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-100}
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads:/data/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    depends_on:
+      db:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+        required: false # absent when using Qdrant Cloud (no local-qdrant profile)
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set NEXT_PUBLIC_API_URL in .env}
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set NEXT_PUBLIC_API_URL in .env}
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  qdrant_data:
+  uploads:

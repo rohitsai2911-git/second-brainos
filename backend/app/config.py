@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
     QDRANT_COLLECTION: str = "knowledge_chunks"
+    # Cloud alternative: set QDRANT_URL (e.g. Qdrant Cloud) + optional QDRANT_API_KEY.
+    # Takes precedence over HOST/PORT when set.
+    QDRANT_URL: str = ""
+    QDRANT_API_KEY: str = ""
 
     # Auth
     JWT_SECRET: str = DEFAULT_JWT_SECRET

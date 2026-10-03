@@ -4,7 +4,22 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 from .config import settings
 
-engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=20)
+
+def normalize_database_url(url: str) -> str:
+    """Accept hosted-Postgres URL forms (Render/Railway/Supabase).
+
+    Render and Heroku expose `postgres://...`; SQLAlchemy requires
+    `postgresql+psycopg2://...`. Local/dev URLs already in the long
+    form pass through untouched.
+    """
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+psycopg2://", 1)
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    return url
+
+
+engine = create_engine(normalize_database_url(settings.DATABASE_URL), pool_pre_ping=True, pool_size=10, max_overflow=20)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
