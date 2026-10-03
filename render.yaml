@@ -68,3 +68,5 @@ services:
     envVars:
       - key: NEXT_PUBLIC_API_URL
         sync: false # paste backend URL, e.g. https://sbo-backend-xxxx.onrender.com
+      - key: HOSTNAME
+        value: "0.0.0.0" # gateway must reach Next standalone; localhost bind = 502
